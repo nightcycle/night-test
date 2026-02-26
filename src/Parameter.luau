@@ -45,6 +45,7 @@ export type Parameter =
 	| FilterParameter
 	| FallbackParameter
 	| ComputedParameter
+	| StaticParameter
 
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
@@ -773,6 +774,29 @@ Parameter.Fallback = {
 			`fallback and value serializers must produce the same output for the same input: "{valueSer}" vs "{fallbackSer}"`
 		)
 		return valueSer
+	end :: (any, any?) -> JSONValue,
+}
+
+type StaticParameter = {
+	Key: string,
+	Type: "Static",
+	Value: any?,
+	SerializeCallback: (customValue: any?) -> JSONValue,
+}
+Parameter.Static = {
+	new = function(key: string, value: any, serializeCallback: (customValue: any?) -> JSONValue): StaticParameter
+		return {
+			Key = key,
+			Type = "Static",
+			Value = value,
+			SerializeCallback = serializeCallback or fallbackSerializer,
+		}
+	end,
+	generate = function(param: StaticParameter, rng: Random): any?
+		return param.Value
+	end :: (any, Random) -> any?,
+	serialize = function(param: StaticParameter, value: any?): JSONValue
+		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
 }
 
