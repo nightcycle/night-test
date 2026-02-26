@@ -15,11 +15,11 @@ export type TestResult =
 	{
 		Type: "Error",
 		Message: string,
-		Parameters: { Parameter.JSONValue },
+		Parameters: { { key: string, value: Parameter.JSONValue } },
 	}
 	| {
 		Type: "Success" | "Failure",
-		Parameters: { Parameter.JSONValue },
+		Parameters: { { key: string, value: Parameter.JSONValue } },
 	}
 export type Test = {
 	Type: "NightTest",
@@ -133,9 +133,13 @@ return {
 
 		for i, paramSet in parameters do
 			checkPause()
-			local jsonParams: { Parameter.JSONValue } = table.create(#paramSet) :: any
+			local jsonParams: { { key: string, value: Parameter.JSONValue } } = table.create(#paramSet) :: any
 			for j, param in paramSet do
-				jsonParams[j] = Parameter.Any.serialize(test.Parameters[j], param)
+				jsonParams[j] = {
+					key = `{test.Parameters[j].Key}({test.Parameters[j].Type})`,
+					value = Parameter.Any.serialize(test.Parameters[j], param),
+				}
+				table.freeze(jsonParams[j])
 			end
 			table.freeze(jsonParams)
 			local result: TestResult?
