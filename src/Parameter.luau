@@ -1,5 +1,6 @@
 --!strict
 -- Services
+local HttpService = game:GetService("HttpService")
 -- Packages
 -- Modules
 -- Types
@@ -28,6 +29,7 @@ export type Parameter =
 	| ChooseParameter
 	| SetParameter
 	| FilterParameter
+	| FallbackParameter
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
 	Key: string,
@@ -659,6 +661,50 @@ Parameter.Nullable = {
 		else
 			return Parameter.Any.serialize(param.ValueType, value)
 		end
+	end :: (any, any?) -> JSONValue,
+}
+
+type FallbackParameter = {
+	Key: string,
+	Type: "Fallback",
+	ValueType: Parameter,
+	FallbackType: Parameter,
+}
+Parameter.Fallback = {
+	new = function(key: string, valueType: Parameter, fallbackType: Parameter): FallbackParameter
+		return {
+			Key = key,
+			Type = "Fallback",
+			ValueType = valueType,
+			FallbackType = fallbackType,
+		}
+	end,
+	generate = function(param: FallbackParameter, rng: Random): any?
+		local value: any?
+		pcall(function(...)
+			value = Parameter.Any.generate(param.ValueType, rng)
+		end)
+		if value == nil then
+			return Parameter.Any.generate(param.FallbackType, rng)
+		end
+		return value
+	end :: (any, Random) -> any?,
+	serialize = function(param: FallbackParameter, value: any?): JSONValue
+		local valueSer = Parameter.Any.serialize(param.ValueType, value)
+		local fallbackSer = Parameter.Any.serialize(param.FallbackType, value)
+		if fallbackSer ~= valueSer then
+			if typeof(valueSer) == "table" then
+				valueSer = HttpService:JSONEncode(valueSer)
+			end
+			if typeof(fallbackSer) == "table" then
+				fallbackSer = HttpService:JSONEncode(fallbackSer)
+			end
+		end
+		assert(
+			valueSer == fallbackSer,
+			`fallback and value serializers must produce the same output for the same input: "{valueSer}" vs "{fallbackSer}"`
+		)
+		return valueSer
 	end :: (any, any?) -> JSONValue,
 }
 
