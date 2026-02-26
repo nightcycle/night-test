@@ -13,13 +13,14 @@ local DEFAULT_ENV = {
 	IS_VERBOSE = false,
 	DEBUG_CLIP_RESULTS_AT = 5,
 	SEARCH_FILTER_PATH = "", --ex: "game/ServerScriptService/Path/To/Test"
+	PAUSE_DURATION = 1 / 30, --if set to 0 it will not pause the thread
 }
 local out = setmetatable({}, {
 	__index = function(_, k): any?
 		assert(typeof(k) == "string", `Attempt to access non-string key "{k}" in ENV`)
+		local dV = rawget(DEFAULT_ENV, k)
 		k = PREFIX .. k
 		local v = _G[k]
-		local dV = rawget(DEFAULT_ENV, k)
 		if dV == nil then
 			error(`Attempt to access undefined key "{k}" in ENV`)
 		end
@@ -49,8 +50,8 @@ local out = setmetatable({}, {
 	end,
 	__newindex = function(_, k, v)
 		assert(typeof(k) == "string", `Attempt to access non-string key "{k}" in ENV`)
-		k = PREFIX .. k
 		assert(rawget(DEFAULT_ENV, k) ~= nil, `Attempt to set undefined key "{k}" in ENV`)
+		k = PREFIX .. k
 		_G[k] = v
 	end,
 })

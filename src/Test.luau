@@ -3,6 +3,7 @@
 -- Packages
 -- Modules
 local Parameter = require(script.Parent.Parameter)
+local ENV = require(script.Parent.ENV)
 -- Types
 type Parameter = Parameter.Parameter
 -- Constants
@@ -87,7 +88,9 @@ function pollForPause(duration: number)
 	return function()
 		if tick() - lastPause >= duration then
 			lastPause = tick()
-			task.wait()
+			if ENV.PAUSE_DURATION > 0 then
+				task.wait(ENV.PAUSE_DURATION)
+			end
 		end
 	end
 end

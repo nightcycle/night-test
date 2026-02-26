@@ -43,8 +43,14 @@ Module.searchFromEnv = function(): TestMap
 		error("SEARCH_FILTER_PATH is not set")
 	else
 		local inst: Instance = game
-		local segments: { string } = string.split(path, "/")
-		if segments[1] == "game" then
+		local splitPath = path
+		if path:sub(-5) == ".luau" then
+			splitPath = path:sub(1, -6)
+		elseif path:sub(-4) == ".lua" then
+			splitPath = path:sub(1, -5)
+		end
+		local segments: { string } = string.split(splitPath, "/")
+		if segments[1] == "game" or segments[1] == "src" then
 			table.remove(segments, 1)
 		end
 		repeat
