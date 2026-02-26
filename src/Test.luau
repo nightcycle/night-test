@@ -82,6 +82,15 @@ function TestTree(v: any?): (boolean, string?)
 	end
 	return false, "Expected a tree of NightTests"
 end
+function pollForPause(duration: number)
+	local lastPause = tick()
+	return function()
+		if tick() - lastPause >= duration then
+			lastPause = tick()
+			task.wait()
+		end
+	end
+end
 -- Class
 return {
 	Type = {
@@ -105,7 +114,9 @@ return {
 		local parameters: { { any } } = table.create(test.Iterations) :: any
 		rng = rng or Random.new()
 		assert(rng, `bad rng`)
+		local checkPause = pollForPause(1 / 30)
 		for i = 1, test.Iterations do
+			checkPause()
 			local paramSet = table.create(#test.Parameters)
 			for j, param in test.Parameters do
 				paramSet[j] = Parameter.Any.generate(param, rng)
@@ -118,6 +129,7 @@ return {
 		local out: { TestResult } = table.create(test.Iterations) :: any
 
 		for i, paramSet in parameters do
+			checkPause()
 			local jsonParams: { Parameter.JSONValue } = table.create(#paramSet) :: any
 			for j, param in paramSet do
 				jsonParams[j] = Parameter.Any.serialize(test.Parameters[j], param)

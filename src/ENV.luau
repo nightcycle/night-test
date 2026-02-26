@@ -4,7 +4,7 @@
 -- Modules
 -- Types
 -- Constants
-local PREFIX = "SIMPLETEST_"
+local PREFIX = "SIMPLETEST__"
 -- Variables
 -- References
 -- Private Functions
@@ -12,6 +12,7 @@ local PREFIX = "SIMPLETEST_"
 local DEFAULT_ENV = {
 	IS_VERBOSE = false,
 	DEBUG_CLIP_RESULTS_AT = 5,
+	SEARCH_FILTER_PATH = "", --ex: "game/ServerScriptService/Path/To/Test"
 }
 local out = setmetatable({}, {
 	__index = function(_, k): any?

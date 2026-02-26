@@ -6,6 +6,7 @@ local Parameter = require(script.Parameter)
 local Test = require(script.Test)
 local Debug = require(script.Debug)
 local Summary = require(script.Summary)
+local ENV = require(script.ENV)
 -- Types
 export type Test = Test.Test
 export type TestMap = Test.TestMap
@@ -34,10 +35,38 @@ Module.Parameter = Parameter
 Module.Summary = Summary
 Module.Test = Test
 Module.Debug = Debug
+Module.ENV = ENV
+
+Module.searchFromEnv = function(): TestMap
+	local path = ENV.SEARCH_FILTER_PATH
+	if path == "" then
+		error("SEARCH_FILTER_PATH is not set")
+	else
+		local inst: Instance = game
+		local segments: { string } = string.split(path, "/")
+		if segments[1] == "game" then
+			table.remove(segments, 1)
+		end
+		repeat
+			local segment = segments[1]
+			if not segment then
+				error(`Invalid SEARCH_FILTER_PATH: "{path}"`)
+			end
+			local child = inst:FindFirstChild(segment)
+			if child == nil then
+				error(`Invalid SEARCH_FILTER_PATH, could not find instance at segment "{segment}": "{path}"`)
+			end
+			inst = child
+			table.remove(segments, 1)
+		until #segments == 0
+		return Module.search({ inst })
+	end
+end
+
 Module.search = function(instances: { Instance }): TestMap
 	local out: { [string]: Test } = {}
 	for _, instance in instances do
-		if instance:IsA("ModuleScript") and instance.Name:match("%.spec.luau") then
+		if instance:IsA("ModuleScript") and instance.Name:sub(-5) == ".spec" then
 			local success, module = pcall(require, instance)
 			if success then
 				do
