@@ -784,7 +784,7 @@ type StaticParameter = {
 	SerializeCallback: (customValue: any?) -> JSONValue,
 }
 Parameter.Static = {
-	new = function(key: string, value: any, serializeCallback: (customValue: any?) -> JSONValue): StaticParameter
+	new = function(key: string, value: any, serializeCallback: ((customValue: any?) -> JSONValue)?): StaticParameter
 		return {
 			Key = key,
 			Type = "Static",
