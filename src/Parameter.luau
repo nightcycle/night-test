@@ -9,6 +9,19 @@ local CONSTANTS = require(script.Parent.CONSTANTS)
 -- Variables
 -- References
 -- Private Functions
+function fallbackSerializer(value: any?): JSONValue
+	if
+		typeof(value) == "table"
+		or typeof(value) == "number"
+		or typeof(value) == "string"
+		or typeof(value) == "boolean"
+		or value == nil
+	then
+		return value
+	else
+		error(`Cannot serialize value of type "{typeof(value)}" for ChooseParameter without a custom serializeCallback`)
+	end
+end
 -- Class
 local Parameter = {}
 
@@ -27,9 +40,11 @@ export type Parameter =
 	| BrickColorParameter
 	| CustomParameter
 	| ChooseParameter
+	| RaffleParameter
 	| SetParameter
 	| FilterParameter
 	| FallbackParameter
+	| RaffleParameter
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
 type CustomParameter = {
 	Key: string,
@@ -47,22 +62,7 @@ Parameter.Custom = {
 			Key = key,
 			Type = "Custom",
 			Method = method,
-			SerializeCallback = serializeCallback
-				or function(value: any?): JSONValue
-					if
-						typeof(value) == "table"
-						or typeof(value) == "number"
-						or typeof(value) == "string"
-						or typeof(value) == "boolean"
-						or value == nil
-					then
-						return value
-					else
-						error(
-							`Cannot serialize value of type "{typeof(value)}" for CustomParameter without a custom SerializeCallback`
-						)
-					end
-				end,
+			SerializeCallback = serializeCallback or fallbackSerializer,
 		}
 	end,
 	generate = function(param: CustomParameter, rng: Random): any?
@@ -315,22 +315,7 @@ Parameter.Choose = {
 			Key = key,
 			Type = "Choose",
 			Values = values,
-			SerializeCallback = serializeCallback
-				or function(value: any?): JSONValue
-					if
-						typeof(value) == "table"
-						or typeof(value) == "number"
-						or typeof(value) == "string"
-						or typeof(value) == "boolean"
-						or value == nil
-					then
-						return value
-					else
-						error(
-							`Cannot serialize value of type "{typeof(value)}" for ChooseParameter without a custom serializeCallback`
-						)
-					end
-				end,
+			SerializeCallback = serializeCallback or fallbackSerializer,
 		}
 	end,
 	generate = function(param: ChooseParameter, rng: Random): any
@@ -338,6 +323,54 @@ Parameter.Choose = {
 		return param.Values[index]
 	end :: (any, Random) -> any,
 	serialize = function(param: ChooseParameter, value: any?): JSONValue
+		return param.SerializeCallback(value)
+	end :: (any, any?) -> JSONValue,
+}
+
+type RaffleParameter = {
+	Key: string,
+	Type: "Raffle",
+	Raffle: { { Value: any, Position: number } },
+	OddSum: number,
+	SerializeCallback: (customValue: any?) -> JSONValue,
+}
+Parameter.Raffle = {
+	new = function<V>(
+		key: string,
+		odds: { [V]: number },
+		serializeCallback: ((customValue: V) -> JSONValue)?
+	): RaffleParameter
+		local raffle: { any } = {}
+		local index = 0
+		for v, odd in pairs(odds) do
+			local entry: any = {
+				Value = v,
+				Position = index,
+			}
+			table.freeze(entry)
+			table.insert(raffle, entry)
+			index += odd
+		end
+		table.freeze(raffle)
+
+		return {
+			Key = key,
+			Type = "Raffle",
+			Raffle = raffle,
+			OddSum = index,
+			SerializeCallback = serializeCallback or fallbackSerializer,
+		}
+	end,
+	generate = function(param: RaffleParameter, rng: Random): any
+		local hit = math.clamp(rng:NextNumber() * param.OddSum, 0, param.OddSum)
+		for i, entry in param.Raffle do
+			if hit < entry.Position or i == #param.Raffle then
+				return entry.Value
+			end
+		end
+		error(`Failed to generate value for RaffleParameter "{param.Key}". This should never happen.`)
+	end :: (any, Random) -> any,
+	serialize = function(param: RaffleParameter, value: any?): JSONValue
 		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
 }
@@ -722,16 +755,8 @@ Parameter.Any.serialize = function(param: Parameter, value: any?): JSONValue
 	assert(solver, `bad solver: "{param.Type}"`)
 	if solver.serialize then
 		return solver.serialize(param, value)
-	elseif
-		typeof(value) == "table"
-		or typeof(value) == "number"
-		or typeof(value) == "string"
-		or typeof(value) == "boolean"
-		or value == nil
-	then
-		return value
 	else
-		error(`Cannot serialize value of type "{typeof(value)}" for parameter of type "{param.Type}"`)
+		return fallbackSerializer(value)
 	end
 end
 
