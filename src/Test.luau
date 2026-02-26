@@ -134,10 +134,10 @@ return {
 		for i, paramSet in parameters do
 			checkPause()
 			local jsonParams: { { key: string, value: Parameter.JSONValue } } = table.create(#paramSet) :: any
-			for j, param in paramSet do
+			for j = 1, #paramSet do
 				jsonParams[j] = {
 					key = `{test.Parameters[j].Key}({test.Parameters[j].Type})`,
-					value = Parameter.Any.serialize(test.Parameters[j], param),
+					value = Parameter.Any.serialize(test.Parameters[j], paramSet[j]),
 				}
 				table.freeze(jsonParams[j])
 			end
