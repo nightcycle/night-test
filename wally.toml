@@ -1,6 +1,6 @@
 [package]
-name = "nightcycle/night-test"
-description = "A test project for Nightcycle"
+name = "nightcycle/simple-test"
+description = "A lightweight test runner built for CI/CD actions"
 version = "0.1.0"
 license = "Apache"
 registry = "https://github.com/UpliftGames/wally-index"
