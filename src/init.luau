@@ -23,7 +23,7 @@ local CONSTANTS = require(script.CONSTANTS)
 -- Private Functions
 function toPath(inst: Instance): string
 	local path = inst:GetFullName()
-	path = path:gsub("%.spec.luau", ""):gsub("%.", "/")
+	path = path:gsub("%.spec", ""):gsub("%.", "/")
 	return path
 end
 
