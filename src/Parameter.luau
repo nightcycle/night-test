@@ -23,97 +23,159 @@ function fallbackSerializer(value: any?): JSONValue
 		error(`Cannot serialize value of type "{typeof(value)}" for ChooseParameter without a custom serializeCallback`)
 	end
 end
-function factorial(n: number): number
-	local result = 1
-	for i = 2, n do
-		result *= i
-	end
-	return result
-end
-function permuteArray<V>(arr: { V }, maxPermutations: number): { { V } } | number
-	local count = factorial(#arr)
-	if count > maxPermutations then
-		return count
-	end
+function solveArrayPermutations<V>(arr: { V }, filter: ((V) -> boolean)?): { { V } }
 	local results = {}
 
-	local function permute(current: { V }, remaining: { V })
+	local function recurse(current: { V }, remaining: { V })
 		if #remaining == 0 then
-			table.insert(results, table.clone(current))
+			if filter == nil or filter(current) then
+				table.insert(results, table.clone(current))
+			end
 			return
 		end
-
-		for i, value in ipairs(remaining) do
+		for i = 1, #remaining do
+			table.insert(current, remaining[i])
 			local next = table.clone(remaining)
 			table.remove(next, i)
-			table.insert(current, value)
-			permute(current, next)
+			recurse(current, next)
 			table.remove(current)
 		end
 	end
 
-	permute({}, table.clone(arr))
+	recurse({}, arr)
 	return results
 end
 
-function allCombinations<V>(valueSet: { V }, lower: number, upper: number, maxPermutations: number): { V } | number
-	do
-		local function choose(n: number, k: number): number
-			if k > n then
-				return 0
+function solveArrayCombinations<V>(set: { V }, k: number, filter: ((V) -> boolean)?): { { V } }
+	local results = {}
+
+	local function recurse(start: number, current: { unknown })
+		if #current == k then
+			if filter == nil or filter(current) then
+				table.insert(results, table.clone(current))
 			end
-			if k == 0 or k == n then
-				return 1
-			end
-			k = math.min(k, n - k) -- symmetry: C(n,k) == C(n,n-k)
-			local result = 1
-			for i = 0, k - 1 do
-				result = result * (n - i) / (i + 1)
-			end
-			return math.floor(result + 0.5) -- round for floating point drift
+			return
 		end
 
-		local total = 0
-		for k = lower, upper do
-			total = total + choose(#valueSet, k)
-		end
-		if total > maxPermutations then
-			return total
+		local remaining = k - #current
+		for i = start, #set - remaining + 1 do
+			table.insert(current, set[i])
+			recurse(i + 1, current)
+			table.remove(current)
 		end
 	end
-	do
-		local function combinations(k: number): { V }
-			local results = {}
 
-			local function recurse(start: number, current: { V })
-				if #current == k then
+	recurse(1, {})
+	return results
+end
+function getArrayPermutationCount(setSize: number, minLength: number, maxLength: number): number
+	local function permCount(n: number, k: number): number
+		if k > n then
+			return 0
+		end
+		local result = 1
+		for i = 0, k - 1 do
+			result = result * (n - i)
+		end
+		return result
+	end
+
+	local total = 0
+	for k = minLength, maxLength do
+		total = total + permCount(setSize, k)
+	end
+	return total
+end
+function solveSetPermutationCount(setSize: number, minLength: number, maxLength: number): number
+	local function permCount(n: number, k: number): number
+		if k > n then
+			return 0
+		end
+		local result = 1
+		for i = 0, k - 1 do
+			result = result * (n - i)
+		end
+		return result
+	end
+
+	-- With duplicates, exact count is hard to predict analytically,
+	-- so we use P(n,k) as a conservative upper bound for the guard
+	local total = 0
+	for k = minLength, maxLength do
+		total = total + permCount(setSize, k)
+	end
+	return total
+end
+function solveSetCombinations<V>(valueSet: { V }, lower: number, upper: number, filter: ((V) -> boolean)?): { { V } }
+	local sorted = table.clone(valueSet)
+	table.sort(sorted)
+
+	local function permutations(arr: { V }): { { V } }
+		local results = {}
+
+		local function recurse(current: { V }, remaining: { V })
+			if #remaining == 0 then
+				if filter == nil or filter(current) then
 					table.insert(results, table.clone(current))
-					return
 				end
+				return
+			end
+			local seen = {}
+			for i = 1, #remaining do
+				local val = remaining[i]
+				local key = tostring(val)
+				if not seen[key] then
+					seen[key] = true
+					table.insert(current, val)
+					local next = table.clone(remaining)
+					table.remove(next, i)
+					recurse(current, next)
+					table.remove(current)
+				end
+			end
+		end
 
-				local remaining = k - #current
-				for i = start, #valueSet - remaining + 1 do
-					table.insert(current, valueSet[i])
+		recurse({}, arr)
+		return results
+	end
+
+	local function combinations(k: number): { { V } }
+		local results = {}
+
+		local function recurse(start: number, current: { V })
+			if #current == k then
+				table.insert(results, table.clone(current))
+				return
+			end
+
+			local remaining = k - #current
+			for i = start, #sorted - remaining + 1 do
+				-- skip duplicate values at the same depth level
+				if i == start or tostring(sorted[i]) ~= tostring(sorted[i - 1]) then
+					table.insert(current, sorted[i])
 					recurse(i + 1, current)
 					table.remove(current)
 				end
 			end
-
-			recurse(1, {})
-			return results
 		end
 
-		local results = {}
-
-		for k = lower, upper do
-			for _, combo in combinations(k) do
-				table.insert(results, combo)
-			end
-		end
-
+		recurse(1, {})
 		return results
 	end
+
+	local results = {}
+
+	for k = lower, upper do
+		for _, combo in combinations(k) do
+			for _, perm in permutations(combo) do
+				table.insert(results, perm)
+			end
+		end
+	end
+
+	return results
 end
+
 -- Class
 local Parameter = {}
 
@@ -168,10 +230,28 @@ Parameter.Custom = {
 	serialize = function(param: CustomParameter, value: any?): JSONValue
 		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: CustomParameter, maxPermutations: number): { any } | number
-		if param.Permutations and #param.Permutations <= maxPermutations then
-			return param.Permutations
+	permute = function(
+		param: CustomParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+		if param.Permutations and #param.Permutations <= actualLimit then
+			if filterFunc then
+				local out = {}
+				for _, v in param.Permutations do
+					if filterFunc(v) then
+						table.insert(out, v)
+					end
+				end
+				if #out > maxPermutations then
+					return #param.Permutations
+				end
+				return out
+			end
+			return table.clone(param.Permutations)
 		end
+
 		return if param.Permutations then #param.Permutations else math.huge
 	end,
 }
@@ -212,21 +292,31 @@ Parameter.Integer = {
 		end
 		return value
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: IntegerParameter, maxPermutations: number): { number }?
+	permute = function(
+		param: IntegerParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { number } | number
 		if param.Max then
 			local min = param.Min or 0
 			local increment = param.Increment or 1
-			local amount = math.floor(((param.Max - min) / increment) + 1)
-			if amount > maxPermutations then
-				return nil
+			local total = math.floor(((param.Max - min) / increment) + 1)
+			local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+			if total > actualLimit then
+				return total
 			end
 			local permutations = {}
 			for i = min, param.Max, increment do
-				table.insert(permutations, i)
+				if filterFunc == nil or filterFunc(i) then
+					table.insert(permutations, i)
+				end
+			end
+			if #permutations > maxPermutations then
+				return #permutations
 			end
 			return permutations
 		end
-		return nil
+		return math.huge
 	end,
 }
 
@@ -266,8 +356,12 @@ Parameter.Float = {
 		end
 		return value
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: FloatParameter, maxPermutations: number): { number }?
-		return nil
+	permute = function(
+		param: FloatParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { number } | number
+		return math.huge
 	end,
 }
 type BooleanParameter = {
@@ -286,11 +380,28 @@ Parameter.Boolean = {
 	generate = function(param: BooleanParameter, rng: Random): boolean
 		return rng:NextNumber() < (param.ChanceTrue or 0.5)
 	end :: (any, Random) -> boolean,
-	permute = function(param: BooleanParameter, maxPermutations: number): { boolean }?
-		if maxPermutations >= 2 then
-			return { true, false }
+	permute = function(
+		param: BooleanParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { boolean } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		local perms = { true, false }
+		if #perms > actualLimit then
+			return #perms
 		end
-		return nil
+		local out = {}
+		for _, v in perms do
+			if filterFunc == nil or filterFunc(v) then
+				table.insert(out, v)
+			end
+		end
+
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
 	end,
 }
 
@@ -344,8 +455,12 @@ Parameter.Vector2 = {
 		end
 		return value
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: Vector2Parameter, maxPermutations: number): { Vector2 }?
-		return nil
+	permute = function(
+		param: Vector2Parameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { Vector2 } | number
+		return math.huge
 	end,
 }
 
@@ -409,8 +524,12 @@ Parameter.Vector3 = {
 		end
 		return value
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: Vector2Parameter, maxPermutations: number): { Vector2 }?
-		return nil
+	permute = function(
+		param: Vector2Parameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { Vector2 } | number
+		return math.huge
 	end,
 }
 
@@ -434,11 +553,26 @@ Parameter.Literal = {
 	serialize = function(param: LiteralParameter, value: any?): JSONValue
 		return value
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: LiteralParameter, maxPermutations: number): { string }?
-		if #param.Values <= maxPermutations then
-			return table.clone(param.Values)
+	permute = function(
+		param: LiteralParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { string } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		if #param.Values > actualLimit then
+			return #param.Values
 		end
-		return nil
+		local out = {}
+		for _, v in param.Values do
+			if filterFunc == nil or filterFunc(v) then
+				table.insert(out, v)
+			end
+		end
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
 	end,
 }
 
@@ -465,11 +599,26 @@ Parameter.Choose = {
 	serialize = function(param: ChooseParameter, value: any?): JSONValue
 		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: ChooseParameter, maxPermutations: number): { any } | number
-		if #param.Values <= maxPermutations then
-			return table.clone(param.Values)
+	permute = function(
+		param: ChooseParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		if #param.Values > actualLimit then
+			return #param.Values
 		end
-		return #param.Values
+		local out = {}
+		for _, v in param.Values do
+			if filterFunc == nil or filterFunc(v) then
+				table.insert(out, v)
+			end
+		end
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
 	end,
 }
 
@@ -519,15 +668,25 @@ Parameter.Raffle = {
 	serialize = function(param: RaffleParameter, value: any?): JSONValue
 		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: RaffleParameter, maxPermutations: number): { any } | number
-		if maxPermutations >= #param.Raffle then
-			local permutations = {}
-			for i, entry in param.Raffle do
-				table.insert(permutations, entry.Value)
-			end
-			return permutations
+	permute = function(
+		param: RaffleParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+		if #param.Raffle > actualLimit then
+			return #param.Raffle
 		end
-		return #param.Raffle
+		local out = {}
+		for _, entry in param.Raffle do
+			if filterFunc == nil or filterFunc(entry.Value) then
+				table.insert(out, entry.Value)
+			end
+		end
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
 	end,
 }
 
@@ -558,7 +717,7 @@ Parameter.Array = {
 	end,
 	generate = function(param: ArrayParameter, rng: Random): { any }
 		local minLength = math.max(param.MinLength or 0, 0)
-		local maxLength = math.max(minLength, param.MaxLength or CONSTANTS.DEFAULT_TABLE_SIZE)
+		local maxLength = math.max(minLength, param.MaxLength or ENV.DEFAULT_TABLE_SIZE)
 		local length = rng:NextInteger(minLength, maxLength)
 		local result = {}
 		if length > 0 then
@@ -582,23 +741,39 @@ Parameter.Array = {
 		end
 		return nil
 	end :: (any, any?) -> JSONValue,
-	permute = function(param: ArrayParameter, maxPermutations: number): { any } | number
-		local permutationCount = 0
-		local valuePermutations = Parameter.Any.permute(param.ValueType, maxPermutations)
-		if type(valuePermutations) == "number" then
-			return valuePermutations
+	permute = function(
+		param: ArrayParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any } | number
+		local lower = math.max(param.MinLength or 0, 0)
+		local upper = math.max(lower, param.MaxLength or ENV.DEFAULT_TABLE_SIZE)
+		local valueSet = Parameter.Any.permute(param.ValueType, maxPermutations, filterFunc)
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		do
+			local valueSetCount = if typeof(valueSet) == "number" then valueSet else #valueSet
+			local total = getArrayPermutationCount(valueSetCount, valueSetCount, valueSetCount)
+			if total > actualLimit then
+				return total
+			end
 		end
-		local lengthMin = param.MinLength or 0
-		local lengthMax = math.max(lengthMin, param.MaxLength or CONSTANTS.DEFAULT_TABLE_SIZE)
-		local lengthPermutations = lengthMax - lengthMin + 1
-		permutationCount = lengthPermutations * #valuePermutations
-		if permutationCount > maxPermutations then
-			return permutationCount
+		assert(typeof(valueSet) == "table", `bad valueSet`)
+		do
+			local results: { { unknown } } = {}
+
+			for k = lower, upper do
+				for _, combo in solveArrayCombinations(valueSet, k) do
+					for _, perm in solveArrayPermutations(combo) do
+						table.insert(results, perm)
+					end
+				end
+			end
+			if #results > maxPermutations then
+				return #results
+			end
+			return results
 		end
-		local permutations = {}
-		for length = lengthMin, lengthMax do
-		end
-		return permutations
 	end,
 }
 
@@ -633,6 +808,21 @@ Parameter.Filter = {
 	serialize = function(param: FilterParameter, value: any?): JSONValue
 		return Parameter.Any.serialize(param.ValueType, value)
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: FilterParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any } | number
+		return Parameter.Any.permute(param.ValueType, maxPermutations, function(v): boolean
+			if not param.FilterFunc(v) then
+				return false
+			end
+			if filterFunc and not filterFunc(v) then
+				return false
+			end
+			return true
+		end)
+	end,
 }
 
 type ComputedParameter = {
@@ -641,13 +831,15 @@ type ComputedParameter = {
 	Inputs: { Parameter },
 	ComputeFunc: (...any?) -> any,
 	SerializeCallback: (customValue: any?) -> JSONValue,
+	Permutations: { any }?,
 }
 Parameter.Computed = {
 	new = function(
 		key: string,
 		inputs: { Parameter },
 		computeFunc: (...any?) -> any,
-		serializeCallback: ((customValue: any?) -> JSONValue)?
+		serializeCallback: ((customValue: any?) -> JSONValue)?,
+		permutations: { any }?
 	): ComputedParameter
 		return {
 			Key = key,
@@ -655,6 +847,7 @@ Parameter.Computed = {
 			Inputs = inputs,
 			ComputeFunc = computeFunc,
 			SerializeCallback = serializeCallback or fallbackSerializer,
+			Permutations = permutations,
 		}
 	end,
 	generate = function(param: ComputedParameter, rng: Random): any
@@ -667,6 +860,30 @@ Parameter.Computed = {
 	serialize = function(param: ComputedParameter, value: any?): JSONValue
 		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: ComputedParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		if param.Permutations and #param.Permutations < actualLimit then
+			if filterFunc then
+				local out = {}
+				for _, v in param.Permutations do
+					if filterFunc(v) then
+						table.insert(out, v)
+					end
+				end
+				if #out >= actualLimit then
+					return #out
+				end
+				return out
+			end
+			return table.clone(param.Permutations)
+		end
+		return if param.Permutations then #param.Permutations else math.huge
+	end,
 }
 
 type SetParameter = {
@@ -699,7 +916,7 @@ Parameter.Set = {
 	end,
 	generate = function(param: SetParameter, rng: Random): { any }
 		local minLength = math.max(param.MinLength or 0, 0)
-		local maxLength = math.max(minLength, param.MaxLength or CONSTANTS.DEFAULT_TABLE_SIZE)
+		local maxLength = math.max(minLength, param.MaxLength or ENV.DEFAULT_TABLE_SIZE)
 		local length = if minLength == maxLength then minLength else rng:NextInteger(minLength, maxLength)
 		local result = {}
 		local hashMap: { [string]: true? } = {}
@@ -726,7 +943,7 @@ Parameter.Set = {
 		end
 		return result
 	end :: (any, Random) -> { any },
-	serialize = function(param: ArrayParameter, value: any?): JSONValue
+	serialize = function(param: SetParameter, value: any?): JSONValue
 		if typeof(value) == "table" then
 			local result = {}
 			for i, v in value do
@@ -736,6 +953,31 @@ Parameter.Set = {
 		end
 		return nil
 	end :: (any, any?) -> JSONValue,
+	permute = function(param: SetParameter, maxPermutations: number, filterFunc: ((any) -> boolean)?): { any } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		local lower = math.max(param.MinLength or 0, 0)
+		local upper = math.max(lower, param.MaxLength or ENV.DEFAULT_TABLE_SIZE)
+		local valueSet = Parameter.Any.permute(param.ValueType, maxPermutations, filterFunc)
+		do
+			local valueSetCount = if typeof(valueSet) == "number" then valueSet else #valueSet
+			local total = solveSetPermutationCount(valueSetCount, valueSetCount, valueSetCount)
+			if total > actualLimit then
+				return total
+			end
+		end
+		assert(typeof(valueSet) == "table", `bad valueSet`)
+		do
+			local results: { { unknown } } = {}
+			for _, perm in solveSetCombinations(valueSet, lower, upper, filterFunc) do
+				table.insert(results, perm)
+			end
+			if #results > maxPermutations then
+				return #results
+			end
+			return results
+		end
+	end,
 }
 
 type StringParameter = {
@@ -755,7 +997,7 @@ Parameter.String = {
 	end,
 	generate = function(param: StringParameter, rng: Random): string
 		local minLength = math.max(param.MinLength or 0, 0)
-		local maxLength = math.max(minLength, param.MaxLength or CONSTANTS.DEFAULT_STRING_LENGTH)
+		local maxLength = math.max(minLength, param.MaxLength or ENV.DEFAULT_STRING_LENGTH)
 		local length = rng:NextInteger(minLength, maxLength)
 		if length > 0 then
 			local chars = {}
@@ -768,6 +1010,46 @@ Parameter.String = {
 			return ""
 		end
 	end :: (any, Random) -> string,
+	permute = function(
+		param: StringParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { string } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		local lower = math.max(param.MinLength or 0, 0)
+		local upper = math.max(lower, param.MaxLength or ENV.DEFAULT_STRING_LENGTH)
+		local valueSetCount = 126 - 32 + 1
+		do
+			local total = getArrayPermutationCount(valueSetCount, valueSetCount, valueSetCount)
+			if total > actualLimit then
+				return total
+			end
+		end
+		local valueSet = {}
+		for charCode = 32, 126 do
+			local char = string.char(charCode)
+			if filterFunc == nil or filterFunc(char) then
+				table.insert(valueSet, char)
+			end
+		end
+		assert(typeof(valueSet) == "table", `bad valueSet`)
+		do
+			local results: { string } = {}
+
+			for k = lower, upper do
+				for _, combo in solveArrayCombinations(valueSet, k) do
+					for _, perm in solveArrayPermutations(combo) do
+						table.insert(results, table.concat(perm))
+					end
+				end
+			end
+			if #results > maxPermutations then
+				return #results
+			end
+			return results
+		end
+	end,
 }
 type Color3Parameter = {
 	Key: string,
@@ -796,10 +1078,246 @@ Parameter.Color3 = {
 		end
 		return value
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: Color3Parameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { Color3 } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+		local total = 256 ^ 3
+		if actualLimit < total then
+			return total
+		end
+		local rgbValues = {}
+		for r = 0, 255 do
+			for g = 0, 255 do
+				for b = 0, 255 do
+					local color = Color3.fromRGB(r, g, b)
+					if filterFunc == nil or filterFunc(color) then
+						table.insert(rgbValues, color)
+					end
+				end
+			end
+		end
+		if #rgbValues > maxPermutations then
+			return #rgbValues
+		end
+		return rgbValues
+	end,
 }
 type BrickColorParameter = {
 	Key: string,
 	Type: "BrickColor",
+}
+local BRICK_COLOR_VALUES = {
+	1,
+	2,
+	3,
+	5,
+	6,
+	9,
+	11,
+	12,
+	18,
+	21,
+	22,
+	23,
+	24,
+	25,
+	26,
+	27,
+	28,
+	29,
+	36,
+	37,
+	38,
+	39,
+	40,
+	41,
+	42,
+	43,
+	44,
+	45,
+	47,
+	48,
+	49,
+	50,
+	100,
+	101,
+	102,
+	103,
+	104,
+	105,
+	106,
+	107,
+	108,
+	110,
+	111,
+	112,
+	113,
+	115,
+	116,
+	118,
+	119,
+	120,
+	121,
+	123,
+	124,
+	125,
+	126,
+	127,
+	128,
+	131,
+	133,
+	134,
+	135,
+	136,
+	137,
+	138,
+	140,
+	141,
+	143,
+	145,
+	146,
+	147,
+	148,
+	149,
+	150,
+	151,
+	153,
+	154,
+	157,
+	158,
+	168,
+	176,
+	178,
+	179,
+	180,
+	190,
+	191,
+	192,
+	193,
+	194,
+	195,
+	196,
+	198,
+	199,
+	200,
+	208,
+	209,
+	210,
+	211,
+	212,
+	213,
+	216,
+	217,
+	218,
+	219,
+	220,
+	221,
+	222,
+	223,
+	224,
+	225,
+	226,
+	232,
+	268,
+	301,
+	302,
+	303,
+	304,
+	305,
+	306,
+	307,
+	308,
+	309,
+	310,
+	311,
+	312,
+	313,
+	314,
+	315,
+	316,
+	317,
+	318,
+	319,
+	320,
+	321,
+	322,
+	323,
+	324,
+	325,
+	327,
+	328,
+	329,
+	330,
+	331,
+	332,
+	333,
+	334,
+	335,
+	336,
+	337,
+	338,
+	339,
+	340,
+	341,
+	342,
+	343,
+	344,
+	345,
+	346,
+	347,
+	348,
+	349,
+	350,
+	351,
+	352,
+	353,
+	354,
+	355,
+	356,
+	357,
+	358,
+	359,
+	360,
+	361,
+	362,
+	363,
+	364,
+	365,
+	1001,
+	1002,
+	1003,
+	1004,
+	1005,
+	1006,
+	1007,
+	1008,
+	1009,
+	1010,
+	1011,
+	1012,
+	1013,
+	1014,
+	1015,
+	1016,
+	1017,
+	1018,
+	1019,
+	1020,
+	1021,
+	1022,
+	1023,
+	1024,
+	1025,
+	1026,
+	1027,
+	1028,
+	1029,
+	1030,
+	1031,
+	1032,
 }
 Parameter.BrickColor = {
 	new = function(key: string): BrickColorParameter
@@ -809,14 +1327,36 @@ Parameter.BrickColor = {
 		}
 	end,
 	generate = function(param: BrickColorParameter, rng: Random): BrickColor
-		return BrickColor.new(rng:NextNumber(), rng:NextNumber(), rng:NextNumber())
+		return BrickColor.new(BRICK_COLOR_VALUES[rng:NextInteger(1, #BRICK_COLOR_VALUES)])
 	end :: (any, Random) -> string,
 	serialize = function(param: BrickColorParameter, value: any?): JSONValue
 		if typeof(value) == "BrickColor" then
-			return value.Name
+			return `BrickColor({value.Name})`
 		end
 		return value
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: BrickColorParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { BrickColor } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+
+		if #BRICK_COLOR_VALUES > actualLimit then
+			return #BRICK_COLOR_VALUES
+		end
+		local out = {}
+		for _, v in BRICK_COLOR_VALUES do
+			local color = BrickColor.new(v)
+			if filterFunc == nil or filterFunc(color) then
+				table.insert(out, color)
+			end
+		end
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
+	end,
 }
 
 type MapParameter = {
@@ -846,7 +1386,7 @@ Parameter.Map = {
 	end,
 	generate = function(param: MapParameter, rng: Random): { [any]: any }
 		local minLength = math.max(param.MinLength or 0, 0)
-		local maxLength = math.max(minLength, param.MaxLength or CONSTANTS.DEFAULT_TABLE_SIZE)
+		local maxLength = math.max(minLength, param.MaxLength or ENV.DEFAULT_TABLE_SIZE)
 		local length = rng:NextInteger(minLength, maxLength)
 		local result = {}
 		if length <= 0 then
@@ -882,6 +1422,68 @@ Parameter.Map = {
 		end
 		return nil
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: MapParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { { [any]: any } } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+		local lower = math.max(param.MinLength or 0, 0)
+		local upper = math.max(lower, param.MaxLength or ENV.DEFAULT_TABLE_SIZE)
+		local keySet = Parameter.Any.permute(param.KeyType, maxPermutations)
+		local valueSet = Parameter.Any.permute(param.ValueType, maxPermutations)
+
+		do
+			local keySetCount = if typeof(keySet) == "number" then keySet else #keySet
+			local valueSetCount = if typeof(valueSet) == "number" then valueSet else #valueSet
+			local total = (1 + valueSetCount) ^ keySetCount
+			if total > actualLimit then
+				return total
+			end
+			if typeof(keySet) == "number" then
+				return total
+			end
+			if typeof(valueSet) == "number" then
+				return total
+			end
+		end
+		assert(typeof(keySet) == "table", `bad keySet`)
+		assert(typeof(valueSet) == "table", `bad valueSet`)
+		do
+			local keysPerms = solveSetCombinations(keySet, lower, upper)
+			if #keysPerms > actualLimit then
+				return #keysPerms
+			end
+			local results: { { [any]: any } } = {}
+			for i, keys in keysPerms do
+				local function recurse(keyIndex: number, current: { [any]: any })
+					if keyIndex > #keys then
+						-- All keys assigned, store a copy
+						local dict: { [any]: any } = {}
+						for k, v in pairs(current) do
+							dict[k] = v
+						end
+						table.insert(results, dict)
+						return
+					end
+
+					local key = keys[keyIndex]
+					for _, value in ipairs(valueSet) do
+						current[key] = value
+						recurse(keyIndex + 1, current)
+					end
+					current[key] = nil
+				end
+
+				recurse(1, {})
+			end
+
+			if #results > maxPermutations then
+				return #results
+			end
+			return results
+		end
+	end,
 }
 
 type NullableParameter = {
@@ -914,6 +1516,13 @@ Parameter.Nullable = {
 			return Parameter.Any.serialize(param.ValueType, value)
 		end
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: NullableParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any? } | number
+		return math.huge -- can't return a null value in a list in lua, this is included to avoid it being permuted as it would never include a null value
+	end,
 }
 
 type FallbackParameter = {
@@ -958,6 +1567,38 @@ Parameter.Fallback = {
 		)
 		return valueSer
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: FallbackParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any? } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+		local values = Parameter.Any.permute(param.ValueType, maxPermutations, filterFunc)
+		local fallbackValues = Parameter.Any.permute(param.FallbackType, maxPermutations, filterFunc)
+		local valueSetCount = if typeof(values) == "number" then values else #values
+		local fallbackSetCount = if typeof(fallbackValues) == "number" then fallbackValues else #fallbackValues
+		local total = valueSetCount + fallbackSetCount
+		if total > actualLimit then
+			return total
+		end
+		if typeof(values) == "number" then
+			return total
+		end
+		if typeof(fallbackValues) == "number" then
+			return total
+		end
+		local out = {}
+		for _, v in values do
+			table.insert(out, v)
+		end
+		for _, v in fallbackValues do
+			table.insert(out, v)
+		end
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
+	end,
 }
 
 type StaticParameter = {
@@ -981,6 +1622,21 @@ Parameter.Static = {
 	serialize = function(param: StaticParameter, value: any?): JSONValue
 		return param.SerializeCallback(value)
 	end :: (any, any?) -> JSONValue,
+	permute = function(
+		param: StaticParameter,
+		maxPermutations: number,
+		filterFunc: ((any) -> boolean)?
+	): { any? } | number
+		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
+		if filterFunc == nil or filterFunc(param.Value) then
+			if actualLimit < 1 then
+				return 1
+			end
+			return { param.Value }
+		else
+			return {}
+		end
+	end,
 }
 
 Parameter.Any = {}
@@ -1001,11 +1657,11 @@ Parameter.Any.serialize = function(param: Parameter, value: any?): JSONValue
 		return fallbackSerializer(value)
 	end
 end
-Parameter.Any.permute = function(param: Parameter, value: any?): { any }?
+Parameter.Any.permute = function(param: Parameter, value: any?, filterFunc: ((any) -> boolean)?): { any }?
 	local solver = Parameter[param.Type]
 	assert(solver, `bad solver: "{param.Type}"`)
 	if solver.permute then
-		return solver.permute(param, value)
+		return solver.permute(param, value, filterFunc)
 	end
 	return nil
 end

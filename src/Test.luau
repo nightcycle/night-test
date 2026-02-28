@@ -7,7 +7,6 @@ local ENV = require(script.Parent.ENV)
 -- Types
 type Parameter = Parameter.Parameter
 -- Constants
-local CONSTANTS = require(script.Parent.CONSTANTS)
 -- Variables
 -- References
 -- Private Functions
@@ -106,7 +105,7 @@ return {
 		table.freeze(params)
 		local out: Test = {
 			Type = "NightTest" :: "NightTest",
-			Iterations = iterations or CONSTANTS.DEFAULT_ITERATIONS,
+			Iterations = iterations or ENV.DEFAULT_ITERATIONS,
 			Parameters = params,
 			Func = func,
 		}

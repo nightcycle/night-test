@@ -15,6 +15,10 @@ local DEFAULT_ENV = {
 	SEARCH_FILTER_PATH = "", --ex: "game/ServerScriptService/Path/To/Test"
 	PAUSE_DURATION = 1 / 30, --if set to 0 it will not pause the thread
 	MAX_RETRIES = 100_000,
+	MAX_UNCAPPED_PERMUTATIONS = 10_000,
+	DEFAULT_TABLE_SIZE = 12,
+	DEFAULT_STRING_LENGTH = 32,
+	DEFAULT_ITERATIONS = 10_000,
 }
 local out = setmetatable({}, {
 	__index = function(_, k): any?
