@@ -69,6 +69,9 @@ function solveArrayCombinations<V>(set: { V }, k: number, filter: ((V) -> boolea
 	return results
 end
 function getArrayPermutationCount(setSize: number, minLength: number, maxLength: number): number
+	if minLength == math.huge or maxLength == math.huge then
+		return math.huge
+	end
 	local function permCount(n: number, k: number): number
 		if k > n then
 			return 0
@@ -87,6 +90,9 @@ function getArrayPermutationCount(setSize: number, minLength: number, maxLength:
 	return total
 end
 function solveSetPermutationCount(setSize: number, minLength: number, maxLength: number): number
+	if minLength == math.huge or maxLength == math.huge then
+		return math.huge
+	end
 	local function permCount(n: number, k: number): number
 		if k > n then
 			return 0
