@@ -116,12 +116,70 @@ return {
 		local parameters: { { any } } = table.create(test.Iterations) :: any
 		rng = rng or Random.new()
 		assert(rng, `bad rng`)
+
+		local permutedValues: { [number]: { any } | number } = {}
+		do
+			local isAllPermuted = true
+			local function getAvailablePerms(paramCount: number)
+				return math.floor(test.Iterations ^ (1 / paramCount))
+			end
+			for i, param in test.Parameters do
+				local permutations = Parameter.Any.permute(param, getAvailablePerms(#test.Parameters))
+				permutedValues[i] = permutations
+				if typeof(permutations) == "number" then
+					isAllPermuted = false
+				end
+			end
+			while not isAllPermuted do
+				local largestPermCount = 0
+				local largestPermIndex = 0
+				local paramCount = 0
+				for i, perms in permutedValues do
+					if typeof(perms) == "number" and perms > largestPermCount then
+						largestPermCount = perms
+						largestPermIndex = i
+					end
+					paramCount += 1
+				end
+				if largestPermCount == 0 or paramCount == 0 then
+					break
+				end
+				permutedValues[largestPermIndex] = nil
+				isAllPermuted = true
+				for i, param in permutedValues do
+					local permutations = Parameter.Any.permute(test.Parameters[i], getAvailablePerms(paramCount))
+					permutedValues[i] = permutations
+					if typeof(permutations) == "number" then
+						isAllPermuted = false
+					end
+				end
+			end
+		end
+		local finalPermutedValues: { [number]: { any }? } = {}
+		for i, perms in permutedValues do
+			if typeof(perms) == "table" then
+				finalPermutedValues[i] = perms
+			end
+		end
+		do
+			local permutationCount = 1
+			local permutedParameterCount = 0
+			for i, perms in finalPermutedValues do
+				if perms then
+					permutedParameterCount += 1
+					permutationCount *= #perms
+				end
+			end
+			assert(permutationCount < test.Iterations, `permute failed, generated {permutationCount} values`)
+		end
+
 		local checkPause = pollForPause(1 / 30)
 		for i = 1, test.Iterations do
 			checkPause()
 			local paramSet = table.create(#test.Parameters)
 			for j, param in test.Parameters do
-				paramSet[j] = Parameter.Any.generate(param, rng)
+				local perms = finalPermutedValues[j]
+				paramSet[j] = if perms then perms[j % #perms + 1] else Parameter.Any.generate(param, rng)
 			end
 			table.freeze(paramSet)
 			parameters[i] = paramSet
