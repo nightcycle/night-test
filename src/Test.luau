@@ -204,16 +204,47 @@ return {
 			)
 		end
 		Debug.log(`Generating parameter sets for {test.Iterations} iterations...`)
-		for i = 1, test.Iterations do
-			checkPause()
+		local function forParamIndex(iArray: { number })
+			assert(rng, `bad rng`)
 			local paramSet = table.create(#test.Parameters)
-			for j, param in test.Parameters do
-				local perms = finalPermutedValues[j]
-				paramSet[j] = if perms then perms[j % #perms + 1] else Parameter.Any.generate(param, rng)
+			for pIndex, i in iArray do
+				local param = test.Parameters[pIndex]
+				local perms = finalPermutedValues[pIndex]
+				paramSet[pIndex] = if perms then perms[i % #perms + 1] else Parameter.Any.generate(param, rng)
 			end
 			table.freeze(paramSet)
-			parameters[i] = paramSet
+			parameters[#parameters + 1] = paramSet
 		end
+		do
+			local paramIndices: { number } = table.create(#test.Parameters, 1)
+			while #parameters < test.Iterations do
+				for i in paramIndices do
+					local perms = finalPermutedValues[i]
+					if not perms then
+						continue
+					end
+					checkPause()
+					local pI = paramIndices[i]
+					if pI > #perms then
+						paramIndices[i] = 1
+					else
+						paramIndices[i] = pI + 1
+					end
+					forParamIndex(paramIndices)
+				end
+			end
+		end
+
+		-- for i = 1, test.Iterations do
+		-- 	checkPause()
+		-- 	local paramSet = table.create(#test.Parameters)
+		-- 	for j, param in test.Parameters do
+		-- 		local perms = finalPermutedValues[j]
+		-- 		paramSet[j] = if perms then perms[j % #perms + 1] else Parameter.Any.generate(param, rng)
+		-- 	end
+		-- 	table.freeze(paramSet)
+		-- 	parameters[i] = paramSet
+		-- end
 		table.freeze(parameters)
 		Debug.log(`Completed generating parameter sets.`)
 		local out: { TestResult } = table.create(test.Iterations) :: any
