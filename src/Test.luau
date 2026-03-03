@@ -123,24 +123,24 @@ return {
 		local checkPause = pollForPause(1 / 30)
 		do
 			local isAllPermuted = true
-			local function getAvailablePerms(paramCount: number)
-				local iterations = test.Iterations
-				for _, perms in permutedValues do
-					if typeof(perms) ~= "number" then
-						iterations /= #perms
-						paramCount -= 1
-					end
-				end
-				local out = math.floor(iterations ^ (1 / math.max(0, paramCount)))
-				Debug.log(
-					`Permutations available per parameter for {paramCount} parameters for {test.Iterations} iterations: {out}`
-				)
-				return out
-			end
+			-- local function getAvailablePerms(paramCount: number)
+			-- 	local iterations = test.Iterations
+			-- 	for _, perms in permutedValues do
+			-- 		if typeof(perms) ~= "number" then
+			-- 			iterations /= #perms
+			-- 			paramCount -= 1
+			-- 		end
+			-- 	end
+			-- 	local out = math.floor(iterations ^ (1 / math.max(0, paramCount)))
+			-- 	Debug.log(
+			-- 		`Permutations available per parameter for {paramCount} parameters for {test.Iterations} iterations: {out}`
+			-- 	)
+			-- 	return out
+			-- end
 			Debug.log(`Generating permutations for test with {#test.Parameters} parameters...`)
 			for i, param in test.Parameters do
 				checkPause()
-				local permutations = Parameter.Any.permute(param, getAvailablePerms(#test.Parameters))
+				local permutations = Parameter.Any.permute(param, test.Iterations)
 				permutedValues[i] = permutations
 				Debug.log(
 					`Generated {if typeof(permutations) == "number" then permutations else #permutations} permutations for parameter #{i} "{param.Key}" which has type "{param.Type}"`
@@ -154,12 +154,20 @@ return {
 				local largestPermCount = 0
 				local largestPermIndex = 0
 				local paramCount = 0
+				local totalPermCount = 1
 				for i, perms in permutedValues do
 					if typeof(perms) == "number" and perms > largestPermCount then
+						totalPermCount *= perms
 						largestPermCount = perms
 						largestPermIndex = i
 					end
 					paramCount += 1
+				end
+				if totalPermCount >= test.Iterations then
+					Debug.log(
+						`Total permutations across all parameters is {totalPermCount} which is sufficient for {test.Iterations} iterations, no need to clear any more permutations`
+					)
+					break
 				end
 				if largestPermCount == 0 or paramCount == 0 then
 					break
@@ -172,9 +180,8 @@ return {
 				end
 				permutedValues[largestPermIndex] = nil
 				isAllPermuted = true
-				local availablePerms = getAvailablePerms(paramCount)
 				for i, param in permutedValues do
-					local permutations = Parameter.Any.permute(test.Parameters[i], availablePerms)
+					local permutations = Parameter.Any.permute(test.Parameters[i], test.Iterations)
 					permutedValues[i] = permutations
 					if typeof(permutations) == "number" then
 						isAllPermuted = false
