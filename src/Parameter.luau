@@ -927,21 +927,35 @@ Parameter.Set = {
 		local result = {}
 		local hashMap: { [string]: true? } = {}
 		if length > 0 then
-			for i = 1, length do
-				local value: any?
-				local hash: string
-				local maxRuns = 0
-				repeat
-					value = Parameter.Any.generate(param.ValueType, rng)
-					hash = param.HashFunc(value)
-					maxRuns += 1
-					assert(
-						maxRuns < ENV.MAX_RETRIES,
-						`Too many attempts to generate unique value for SetParameter "{param.Key}".`
-					)
-				until hashMap[hash] == nil
-				hashMap[hash] = true
-				result[i] = value
+			local setPermutations = Parameter.Any.permute(param.ValueType, maxLength + 1)
+			if type(setPermutations) == "number" then
+				for i = 1, length do
+					local value: any?
+					local hash: string
+					local maxRuns = 0
+					repeat
+						value = Parameter.Any.generate(param.ValueType, rng)
+						hash = param.HashFunc(value)
+						maxRuns += 1
+						assert(
+							maxRuns < ENV.MAX_RETRIES,
+							`Too many attempts to generate unique value for SetParameter "{param.Key}".`
+						)
+					until hashMap[hash] == nil
+					hashMap[hash] = true
+					result[i] = value
+				end
+			else
+				local scores: { [any]: number } = {}
+				for i, v in setPermutations do
+					scores[v] = rng:NextNumber()
+				end
+				table.sort(setPermutations, function(a, b): boolean
+					return scores[a] < scores[b]
+				end)
+				for i = 1, #setPermutations do
+					table.insert(result, setPermutations[i])
+				end
 			end
 		end
 		if param.IsFrozen then
