@@ -123,20 +123,6 @@ return {
 		local checkPause = pollForPause(1 / 30)
 		do
 			local isAllPermuted = true
-			-- local function getAvailablePerms(paramCount: number)
-			-- 	local iterations = test.Iterations
-			-- 	for _, perms in permutedValues do
-			-- 		if typeof(perms) ~= "number" then
-			-- 			iterations /= #perms
-			-- 			paramCount -= 1
-			-- 		end
-			-- 	end
-			-- 	local out = math.floor(iterations ^ (1 / math.max(0, paramCount)))
-			-- 	Debug.log(
-			-- 		`Permutations available per parameter for {paramCount} parameters for {test.Iterations} iterations: {out}`
-			-- 	)
-			-- 	return out
-			-- end
 			Debug.log(`Generating permutations for test with {#test.Parameters} parameters...`)
 			for i, param in test.Parameters do
 				checkPause()
@@ -196,66 +182,87 @@ return {
 				finalPermutedValues[i] = perms
 			end
 		end
-		do
-			local permutationCount = 1
-			local permutedParameterCount = 0
-			for i, perms in finalPermutedValues do
-				if perms then
-					permutedParameterCount += 1
-					permutationCount *= #perms
+		local permutationCount = 1
+		local permutedParameterCount = 0
+		for i, perms in finalPermutedValues do
+			if perms then
+				permutedParameterCount += 1
+				permutationCount *= #perms
+			end
+		end
+		assert(permutationCount < test.Iterations, `permute failed, generated {permutationCount} values`)
+		local coversAllParameters = permutedParameterCount == #test.Parameters
+		local effectiveIterations = if coversAllParameters
+			then math.min(test.Iterations, permutationCount)
+			else test.Iterations
+		Debug.log(
+			`Using permutations for {permutedParameterCount} parameters, resulting in {permutationCount} total permutations across {effectiveIterations} iterations`
+		)
+		Debug.log(`Generating parameter sets for {effectiveIterations} iterations...`)
+		if coversAllParameters then
+			local function recurse(pIndex: number, current: { any })
+				if #parameters >= effectiveIterations then
+					return
+				end
+				if pIndex > #test.Parameters then
+					checkPause()
+					local paramSet = table.clone(current)
+					table.freeze(paramSet)
+					parameters[#parameters + 1] = paramSet
+					return
+				end
+				local perms = finalPermutedValues[pIndex]
+				assert(perms, `bad permutations for parameter #{pIndex}`)
+				for _, value in perms do
+					current[pIndex] = value
+					recurse(pIndex + 1, current)
 				end
 			end
-			assert(permutationCount < test.Iterations, `permute failed, generated {permutationCount} values`)
-			Debug.log(
-				`Using permutations for {permutedParameterCount} parameters, resulting in {permutationCount} total permutations which will be repeated across the {test.Iterations} iterations`
-			)
-		end
-		Debug.log(`Generating parameter sets for {test.Iterations} iterations...`)
-		local function forParamIndex(iArray: { number })
-			assert(rng, `bad rng`)
-			local paramSet = table.create(#test.Parameters)
-			for pIndex, i in iArray do
-				local param = test.Parameters[pIndex]
-				local perms = finalPermutedValues[pIndex]
-				paramSet[pIndex] = if perms then perms[i % #perms + 1] else Parameter.Any.generate(param, rng)
+			recurse(1, table.create(#test.Parameters))
+		else
+			local function forParamIndex(iArray: { number })
+				assert(rng, `bad rng`)
+				local paramSet = table.create(#test.Parameters)
+				for pIndex, i in iArray do
+					local param = test.Parameters[pIndex]
+					local perms = finalPermutedValues[pIndex]
+					paramSet[pIndex] = if perms then perms[i % #perms + 1] else Parameter.Any.generate(param, rng)
+				end
+				table.freeze(paramSet)
+				parameters[#parameters + 1] = paramSet
 			end
-			table.freeze(paramSet)
-			parameters[#parameters + 1] = paramSet
-		end
-		do
-			local paramIndices: { number } = table.create(#test.Parameters, 1)
-			while #parameters < test.Iterations do
-				for i in paramIndices do
-					local perms = finalPermutedValues[i]
-					if not perms then
-						continue
-					end
+			if permutedParameterCount == 0 then
+				-- Nothing is enumerable, so every value is randomly generated;
+				-- run the full iteration count without cycling any indices.
+				for _ = 1, effectiveIterations do
 					checkPause()
-					local pI = paramIndices[i]
-					if pI > #perms then
-						paramIndices[i] = 1
-					else
-						paramIndices[i] = pI + 1
+					forParamIndex(table.create(#test.Parameters, 1))
+				end
+			else
+				local paramIndices: { number } = table.create(#test.Parameters, 1)
+				while #parameters < effectiveIterations do
+					for i in paramIndices do
+						local perms = finalPermutedValues[i]
+						if not perms then
+							continue
+						end
+						checkPause()
+						local pI = paramIndices[i]
+						if pI > #perms then
+							paramIndices[i] = 1
+						else
+							paramIndices[i] = pI + 1
+						end
+						forParamIndex(paramIndices)
 					end
-					forParamIndex(paramIndices)
 				end
 			end
 		end
 
-		-- for i = 1, test.Iterations do
-		-- 	checkPause()
-		-- 	local paramSet = table.create(#test.Parameters)
-		-- 	for j, param in test.Parameters do
-		-- 		local perms = finalPermutedValues[j]
-		-- 		paramSet[j] = if perms then perms[j % #perms + 1] else Parameter.Any.generate(param, rng)
-		-- 	end
-		-- 	table.freeze(paramSet)
-		-- 	parameters[i] = paramSet
-		-- end
 		table.freeze(parameters)
 		Debug.log(`Completed generating parameter sets.`)
-		local out: { TestResult } = table.create(test.Iterations) :: any
-		Debug.log(`Running {test.Iterations} test cases`)
+		local out: { TestResult } = table.create(#parameters) :: any
+		Debug.log(`Running {#parameters} test cases`)
 		for i, paramSet in parameters do
 			checkPause()
 			local jsonParams: { { key: string, value: Parameter.JSONValue } } = table.create(#paramSet) :: any
