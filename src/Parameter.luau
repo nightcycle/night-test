@@ -182,6 +182,25 @@ function solveSetCombinations<V>(valueSet: { V }, lower: number, upper: number, 
 	return results
 end
 
+function solveCartesianProduct<V>(sets: { { V } }): { { V } }
+	local results = {}
+
+	local function recurse(index: number, current: { V })
+		if index > #sets then
+			table.insert(results, table.clone(current))
+			return
+		end
+		for _, value in sets[index] do
+			table.insert(current, value)
+			recurse(index + 1, current)
+			table.remove(current)
+		end
+	end
+
+	recurse(1, {})
+	return results
+end
+
 -- Class
 local Parameter = {}
 
@@ -198,7 +217,6 @@ export type Parameter =
 	| StringParameter
 	| Color3Parameter
 	| BrickColorParameter
-	| CustomParameter
 	| ChooseParameter
 	| RaffleParameter
 	| SetParameter
@@ -208,60 +226,6 @@ export type Parameter =
 	| StaticParameter
 
 export type JSONValue = string | number | boolean | { [string]: JSONValue } | { JSONValue } | nil
-type CustomParameter = {
-	Key: string,
-	Type: "Custom",
-	Method: (Random) -> any?,
-	SerializeCallback: (customValue: any?) -> JSONValue,
-	Permutations: { any }?,
-}
-Parameter.Custom = {
-	new = function<V>(
-		key: string,
-		method: (Random) -> V,
-		serializeCallback: ((customValue: V) -> JSONValue)?,
-		permutations: { V }?
-	): CustomParameter
-		return {
-			Key = key,
-			Type = "Custom",
-			Method = method,
-			SerializeCallback = serializeCallback or fallbackSerializer,
-			Permutations = permutations,
-		}
-	end,
-	generate = function(param: CustomParameter, rng: Random): any?
-		return param.Method(rng)
-	end :: (any, Random) -> any?,
-	serialize = function(param: CustomParameter, value: any?): JSONValue
-		return param.SerializeCallback(value)
-	end :: (any, any?) -> JSONValue,
-	permute = function(
-		param: CustomParameter,
-		maxPermutations: number,
-		filterFunc: ((any) -> boolean)?
-	): { any } | number
-		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
-		if param.Permutations and #param.Permutations <= actualLimit then
-			if filterFunc then
-				local out = {}
-				for _, v in param.Permutations do
-					if filterFunc(v) then
-						table.insert(out, v)
-					end
-				end
-				if #out > maxPermutations then
-					return #param.Permutations
-				end
-				return out
-			end
-			return table.clone(param.Permutations)
-		end
-
-		return if param.Permutations then #param.Permutations else math.huge
-	end,
-}
-
 type IntegerParameter = {
 	Key: string,
 	Type: "Integer",
@@ -837,15 +801,13 @@ type ComputedParameter = {
 	Inputs: { Parameter },
 	ComputeFunc: (...any?) -> any,
 	SerializeCallback: (customValue: any?) -> JSONValue,
-	Permutations: { any }?,
 }
 Parameter.Computed = {
 	new = function(
 		key: string,
 		inputs: { Parameter },
 		computeFunc: (...any?) -> any,
-		serializeCallback: ((customValue: any?) -> JSONValue)?,
-		permutations: { any }?
+		serializeCallback: ((customValue: any?) -> JSONValue)?
 	): ComputedParameter
 		return {
 			Key = key,
@@ -853,7 +815,6 @@ Parameter.Computed = {
 			Inputs = inputs,
 			ComputeFunc = computeFunc,
 			SerializeCallback = serializeCallback or fallbackSerializer,
-			Permutations = permutations,
 		}
 	end,
 	generate = function(param: ComputedParameter, rng: Random): any
@@ -869,26 +830,38 @@ Parameter.Computed = {
 	permute = function(
 		param: ComputedParameter,
 		maxPermutations: number,
-		filterFunc: ((any) -> boolean)?
+		filterFunc: ((any) -> boolean)?,
+		parameterFilterFuncs: { ((any) -> boolean)? }?
 	): { any } | number
 		local actualLimit = if filterFunc then ENV.MAX_UNCAPPED_PERMUTATIONS else maxPermutations
 
-		if param.Permutations and #param.Permutations < actualLimit then
-			if filterFunc then
-				local out = {}
-				for _, v in param.Permutations do
-					if filterFunc(v) then
-						table.insert(out, v)
-					end
-				end
-				if #out >= actualLimit then
-					return #out
-				end
-				return out
+		local inputSets: { { any } } = {}
+		local total = 1
+		for i, input in param.Inputs do
+			local inputPerms =
+				Parameter.Any.permute(input, actualLimit, parameterFilterFuncs and parameterFilterFuncs[i])
+			local count = if typeof(inputPerms) == "number" then inputPerms else #inputPerms
+			total *= count
+			if total > actualLimit then
+				return total
 			end
-			return table.clone(param.Permutations)
+			if typeof(inputPerms) == "number" then
+				return total
+			end
+			inputSets[i] = inputPerms
 		end
-		return if param.Permutations then #param.Permutations else math.huge
+
+		local out = {}
+		for _, combo in solveCartesianProduct(inputSets) do
+			local value = param.ComputeFunc(table.unpack(combo, 1, #combo))
+			if filterFunc == nil or filterFunc(value) then
+				table.insert(out, value)
+			end
+		end
+		if #out > maxPermutations then
+			return #out
+		end
+		return out
 	end,
 }
 
@@ -1046,7 +1019,7 @@ Parameter.String = {
 				return total
 			end
 		end
-		local valueSet = {}
+		local valueSet: { string } = {}
 		for charCode = 32, 126 do
 			local char = string.char(charCode)
 			if filterFunc == nil or filterFunc(char) then
